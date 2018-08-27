@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 
 	"github.com/peterbourgon/sympatico/internal/ctxlog"
@@ -25,9 +24,8 @@ var (
 
 // Service provides the API.
 type Service struct {
-	repo   Repository
-	valid  Validator
-	logger log.Logger
+	repo  Repository
+	valid Validator
 }
 
 // Repository is a client-side interface, which models
@@ -47,11 +45,10 @@ type Validator interface {
 }
 
 // NewService returns a usable service, wrapping a repository.
-func NewService(r Repository, v Validator, logger log.Logger) *Service {
+func NewService(r Repository, v Validator) *Service {
 	return &Service{
-		repo:   r,
-		valid:  v,
-		logger: logger,
+		repo:  r,
+		valid: v,
 	}
 }
 
@@ -113,11 +110,9 @@ func (s *Service) Check(ctx context.Context, user, token, subsequence string) (e
 // ServeHTTP implements http.Handler in a very naïve way.
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
-		first       = extractPathToken(r.URL.Path, 0)
-		method      = r.Method
+		first  = extractPathToken(r.URL.Path, 0)
+		method = r.Method
 	)
-	defer func() { s.logger.Log(ctxlog.Keyvals()...) }()
 	switch {
 	case method == "POST" && first == "add":
 		var (
@@ -125,7 +120,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token    = r.URL.Query().Get("token")
 			sequence = r.URL.Query().Get("sequence")
 		)
-		err := s.Add(ctx, user, token, sequence)
+		err := s.Add(r.Context(), user, token, sequence)
 		switch {
 		case err == nil:
 			fmt.Fprintln(w, "Add OK")
@@ -141,7 +136,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token       = r.URL.Query().Get("token")
 			subsequence = r.URL.Query().Get("subsequence")
 		)
-		err := s.Check(ctx, user, token, subsequence)
+		err := s.Check(r.Context(), user, token, subsequence)
 		switch {
 		case err == nil:
 			fmt.Fprintln(w, "Subsequence found")

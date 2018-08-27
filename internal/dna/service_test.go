@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
@@ -14,7 +13,7 @@ func TestFlow(t *testing.T) {
 		user  = "vincent"
 		token = "some_token"
 		valid = newMockValidator(user, token)
-		s     = NewService(repo, valid, log.NewNopLogger())
+		s     = NewService(repo, valid)
 	)
 
 	if want, have := ErrBadAuth, s.Add(context.Background(), user, "invalid_token", "gattaca"); want != have {
@@ -52,7 +51,7 @@ func TestValidSequences(t *testing.T) {
 			user  = "foo"
 			token = "bar"
 			valid = newMockValidator(user, token)
-			s     = NewService(repo, valid, log.NewNopLogger())
+			s     = NewService(repo, valid)
 		)
 		if have := s.Add(context.Background(), user, token, sequence); want != have {
 			t.Errorf("Add(%q): want %v, have %v", sequence, want, have)

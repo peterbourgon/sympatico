@@ -17,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/peterbourgon/sympatico/internal/auth"
-	"github.com/peterbourgon/sympatico/internal/ctxlog"
 	"github.com/peterbourgon/sympatico/internal/dna"
 )
 
@@ -54,7 +53,7 @@ func main() {
 			logger.Log("during", "dna.NewSQLiteRepository", "err", err)
 			os.Exit(1)
 		}
-		dnasvc = dna.NewService(dnarepo, authsvc, logger)
+		dnasvc = dna.NewService(dnarepo, authsvc)
 	}
 
 	var api http.Handler
@@ -66,15 +65,16 @@ func main() {
 		// handle functions that translate to and from HTTP semantics. Note that
 		// we don't bind the auth validate method, because that's only used by
 		// other components, never by clients directly.
-		r.Methods("POST").Path("/auth/signup").HandlerFunc(handleSignup(authsvc, logger))
-		r.Methods("POST").Path("/auth/login").HandlerFunc(handleLogin(authsvc, logger))
-		r.Methods("POST").Path("/auth/logout").HandlerFunc(handleLogout(authsvc, logger))
+		r.Methods("POST").Path("/auth/signup").HandlerFunc(handleSignup(authsvc))
+		r.Methods("POST").Path("/auth/login").HandlerFunc(handleLogin(authsvc))
+		r.Methods("POST").Path("/auth/logout").HandlerFunc(handleLogout(authsvc))
 
 		// Another way to make a service accessible over HTTP is to have the
 		// service implement http.Handler directly, via a ServeHTTP method.
 		r.PathPrefix("/dna/").Handler(http.StripPrefix("/dna", dnasvc))
 
-		api = r
+		// Wrap the router with a common logging middleware.
+		api = newLoggingMiddleware(r, logger)
 	}
 
 	var g run.Group
@@ -110,15 +110,13 @@ func main() {
 	logger.Log("exit", g.Run())
 }
 
-func handleSignup(s *auth.Service, logger log.Logger) http.HandlerFunc {
+func handleSignup(s *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
-			user        = r.URL.Query().Get("user")
-			pass        = r.URL.Query().Get("pass")
+			user = r.URL.Query().Get("user")
+			pass = r.URL.Query().Get("pass")
 		)
-		defer func() { logger.Log(ctxlog.Keyvals()...) }()
-		err := s.Signup(ctx, user, pass)
+		err := s.Signup(r.Context(), user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -131,15 +129,13 @@ func handleSignup(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	}
 }
 
-func handleLogin(s *auth.Service, logger log.Logger) http.HandlerFunc {
+func handleLogin(s *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
-			user        = r.URL.Query().Get("user")
-			pass        = r.URL.Query().Get("pass")
+			user = r.URL.Query().Get("user")
+			pass = r.URL.Query().Get("pass")
 		)
-		defer func() { logger.Log(ctxlog.Keyvals()...) }()
-		token, err := s.Login(ctx, user, pass)
+		token, err := s.Login(r.Context(), user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -152,15 +148,13 @@ func handleLogin(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	}
 }
 
-func handleLogout(s *auth.Service, logger log.Logger) http.HandlerFunc {
+func handleLogout(s *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
-			user        = r.URL.Query().Get("user")
-			token       = r.URL.Query().Get("token")
+			user  = r.URL.Query().Get("user")
+			token = r.URL.Query().Get("token")
 		)
-		defer func() { logger.Log(ctxlog.Keyvals()...) }()
-		err := s.Logout(ctx, user, token)
+		err := s.Logout(r.Context(), user, token)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
