@@ -7,8 +7,9 @@ import (
 	"strings"
 
 	"github.com/go-kit/kit/log"
-
 	"github.com/pkg/errors"
+
+	"github.com/peterbourgon/sympatico/internal/ctxlog"
 )
 
 var (
@@ -55,16 +56,23 @@ func NewService(r Repository, v Validator, logger log.Logger) *Service {
 }
 
 // Add a user and their DNA sequence to the database.
-func (s *Service) Add(ctx context.Context, user, token, sequence string) error {
+func (s *Service) Add(ctx context.Context, user, token, sequence string) (err error) {
+	defer func() {
+		ctxlog.From(ctx).Log("dna_method", "Add", "add_user", user, "add_err", err)
+	}()
+
 	if err := s.valid.Validate(ctx, user, token); err != nil {
 		return ErrBadAuth
 	}
+
 	if !validSequence(sequence) {
 		return ErrInvalidSequence
 	}
+
 	if err := s.repo.Insert(ctx, user, sequence); err != nil {
 		return errors.Wrap(err, "error adding new user")
 	}
+
 	return nil
 }
 
@@ -81,26 +89,35 @@ func validSequence(sequence string) bool {
 }
 
 // Check returns true if the given subsequence is present in the user's DNA.
-func (s *Service) Check(ctx context.Context, user, token, subsequence string) error {
+func (s *Service) Check(ctx context.Context, user, token, subsequence string) (err error) {
+	defer func() {
+		ctxlog.From(ctx).Log("dna_method", "Check", "check_user", user, "check_subseq", subsequence, "check_err", err)
+	}()
+
 	if err := s.valid.Validate(ctx, user, token); err != nil {
 		return ErrBadAuth
 	}
+
 	sequence, err := s.repo.Select(ctx, user)
 	if err != nil {
 		return errors.Wrap(err, "error reading DNA sequence from repository")
 	}
+
 	if !strings.Contains(sequence, subsequence) {
 		return ErrSubsequenceNotFound
 	}
+
 	return nil
 }
 
 // ServeHTTP implements http.Handler in a very naïve way.
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		first  = extractPathToken(r.URL.Path, 0)
-		method = r.Method
+		ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
+		first       = extractPathToken(r.URL.Path, 0)
+		method      = r.Method
 	)
+	defer func() { s.logger.Log(ctxlog.Keyvals()...) }()
 	switch {
 	case method == "POST" && first == "add":
 		var (
@@ -108,8 +125,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token    = r.URL.Query().Get("token")
 			sequence = r.URL.Query().Get("sequence")
 		)
-		err := s.Add(r.Context(), user, token, sequence)
-		s.logger.Log("http_method", method, "http_path", r.URL.Path, "user", user, "err", err)
+		err := s.Add(ctx, user, token, sequence)
 		switch {
 		case err == nil:
 			fmt.Fprintln(w, "Add OK")
@@ -125,8 +141,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token       = r.URL.Query().Get("token")
 			subsequence = r.URL.Query().Get("subsequence")
 		)
-		err := s.Check(r.Context(), user, token, subsequence)
-		s.logger.Log("http_method", method, "http_path", r.URL.Path, "user", user, "err", err)
+		err := s.Check(ctx, user, token, subsequence)
 		switch {
 		case err == nil:
 			fmt.Fprintln(w, "Subsequence found")
@@ -139,7 +154,6 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	default:
-		s.logger.Log("http_method", method, "http_path", r.URL.Path, "err", http.StatusText(http.StatusNotFound))
 		http.NotFound(w, r)
 	}
 }

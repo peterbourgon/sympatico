@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/peterbourgon/sympatico/internal/auth"
+	"github.com/peterbourgon/sympatico/internal/ctxlog"
 	"github.com/peterbourgon/sympatico/internal/dna"
 )
 
@@ -112,66 +113,63 @@ func main() {
 func handleSignup(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			user = r.URL.Query().Get("user")
-			pass = r.URL.Query().Get("pass")
+			ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
+			user        = r.URL.Query().Get("user")
+			pass        = r.URL.Query().Get("pass")
 		)
-		err := s.Signup(r.Context(), user, pass)
+		defer func() { logger.Log(ctxlog.Keyvals()...) }()
+		err := s.Signup(ctx, user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
-			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		fmt.Fprintln(w, "signup OK")
-		logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", nil)
 	}
 }
 
 func handleLogin(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			user = r.URL.Query().Get("user")
-			pass = r.URL.Query().Get("pass")
+			ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
+			user        = r.URL.Query().Get("user")
+			pass        = r.URL.Query().Get("pass")
 		)
-		token, err := s.Login(r.Context(), user, pass)
+		defer func() { logger.Log(ctxlog.Keyvals()...) }()
+		token, err := s.Login(ctx, user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
-			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		fmt.Fprintln(w, token)
-		logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", nil)
 	}
 }
 
 func handleLogout(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			user  = r.URL.Query().Get("user")
-			token = r.URL.Query().Get("token")
+			ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
+			user        = r.URL.Query().Get("user")
+			token       = r.URL.Query().Get("token")
 		)
-		err := s.Logout(r.Context(), user, token)
+		defer func() { logger.Log(ctxlog.Keyvals()...) }()
+		err := s.Logout(ctx, user, token)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
-			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		fmt.Fprintln(w, "logout OK")
-		logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", nil)
 	}
 }
 
