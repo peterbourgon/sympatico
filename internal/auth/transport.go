@@ -5,31 +5,22 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-kit/kit/endpoint"
 	kithttp "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 )
 
-// NewGoKitHandler returns an http.Handler with routes for each endpoint.
+// NewHTTPTransport returns an http.Handler with routes for each endpoint.
 // It uses the Go kit style endpoints, and Go kit http.Servers.
-func NewGoKitHandler(service *Service) http.Handler {
+func NewHTTPTransport(s *Service) http.Handler {
 	r := mux.NewRouter()
+	e := makeEndpoints(s)
 	{
-		r.Methods("POST").Path("/signup").Handler(kithttp.NewServer(makeSignupEndpoint(service), decodeSignupRequest, encodeSignupResponse))
-		r.Methods("POST").Path("/login").Handler(kithttp.NewServer(makeLoginEndpoint(service), decodeLoginRequest, encodeLoginResponse))
-		r.Methods("GET").Path("/validate").Handler(kithttp.NewServer(makeValidateEndpoint(service), decodeValidateRequest, encodeValidateResponse))
-		r.Methods("POST").Path("/logout").Handler(kithttp.NewServer(makeLogoutEndpoint(service), decodeLogoutRequest, encodeLogoutResponse))
+		r.Methods("POST").Path("/signup").Handler(kithttp.NewServer(e.signup, decodeSignupRequest, encodeSignupResponse))
+		r.Methods("POST").Path("/login").Handler(kithttp.NewServer(e.login, decodeLoginRequest, encodeLoginResponse))
+		r.Methods("GET").Path("/validate").Handler(kithttp.NewServer(e.validate, decodeValidateRequest, encodeValidateResponse))
+		r.Methods("POST").Path("/logout").Handler(kithttp.NewServer(e.logout, decodeLogoutRequest, encodeLogoutResponse))
 	}
 	return r
-}
-
-type signupRequest struct {
-	user string
-	pass string
-}
-
-type signupResponse struct {
-	err error
 }
 
 func decodeSignupRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
@@ -54,24 +45,6 @@ func encodeSignupResponse(ctx context.Context, w http.ResponseWriter, response i
 	return nil
 }
 
-func makeSignupEndpoint(s *Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(signupRequest)
-		serr := s.Signup(ctx, req.user, req.pass)
-		return signupResponse{err: serr}, nil
-	}
-}
-
-type loginRequest struct {
-	user string
-	pass string
-}
-
-type loginResponse struct {
-	token string
-	err   error
-}
-
 func decodeLoginRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	return loginRequest{
 		user: r.URL.Query().Get("user"),
@@ -92,23 +65,6 @@ func encodeLoginResponse(ctx context.Context, w http.ResponseWriter, response in
 		panic("unreachable")
 	}
 	return nil
-}
-
-func makeLoginEndpoint(s *Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(loginRequest)
-		token, serr := s.Login(ctx, req.user, req.pass)
-		return loginResponse{token: token, err: serr}, nil
-	}
-}
-
-type logoutRequest struct {
-	user  string
-	token string
-}
-
-type logoutResponse struct {
-	err error
 }
 
 func decodeLogoutRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
@@ -133,23 +89,6 @@ func encodeLogoutResponse(ctx context.Context, w http.ResponseWriter, response i
 	return nil
 }
 
-func makeLogoutEndpoint(s *Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(logoutRequest)
-		serr := s.Logout(ctx, req.user, req.token)
-		return logoutResponse{err: serr}, nil
-	}
-}
-
-type validateRequest struct {
-	user  string
-	token string
-}
-
-type validateResponse struct {
-	err error
-}
-
 func decodeValidateRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	return validateRequest{
 		user:  r.URL.Query().Get("user"),
@@ -170,12 +109,4 @@ func encodeValidateResponse(ctx context.Context, w http.ResponseWriter, response
 		panic("unreachable")
 	}
 	return nil
-}
-
-func makeValidateEndpoint(s *Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(validateRequest)
-		serr := s.Validate(ctx, req.user, req.token)
-		return validateResponse{err: serr}, nil
-	}
 }

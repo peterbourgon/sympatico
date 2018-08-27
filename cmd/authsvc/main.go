@@ -64,7 +64,7 @@ func main() {
 	var api http.Handler
 	{
 		r := mux.NewRouter()
-		r.PathPrefix("/auth/").Handler(http.StripPrefix("/auth", auth.NewGoKitHandler(authsvc)))
+		r.PathPrefix("/auth/").Handler(http.StripPrefix("/auth", auth.NewHTTPTransport(authsvc)))
 		api = ctxlog.NewHTTPMiddleware(r, logger)
 	}
 
