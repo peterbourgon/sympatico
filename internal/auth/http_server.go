@@ -1,94 +1,181 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
+	"github.com/go-kit/kit/endpoint"
+	kithttp "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 )
 
-// HTTPServer wraps a Service and implements http.Handler.
-type HTTPServer struct {
-	router  *mux.Router
-	service *Service
-}
-
-// NewHTTPServer returns an HTTPServer wrapping the Service.
-func NewHTTPServer(service *Service) *HTTPServer {
-	s := &HTTPServer{
-		service: service,
-	}
+// NewGoKitHandler returns an http.Handler with routes for each endpoint.
+// It uses the Go kit style endpoints, and Go kit http.Servers.
+func NewGoKitHandler(service *Service) http.Handler {
 	r := mux.NewRouter()
 	{
-		r.Methods("POST").Path("/signup").HandlerFunc(s.handleSignup)
-		r.Methods("POST").Path("/login").HandlerFunc(s.handleLogin)
-		r.Methods("GET").Path("/validate").HandlerFunc(s.handleValidate)
-		r.Methods("POST").Path("/logout").HandlerFunc(s.handleLogout)
+		r.Methods("POST").Path("/signup").Handler(kithttp.NewServer(makeSignupEndpoint(service), decodeSignupRequest, encodeSignupResponse))
+		r.Methods("POST").Path("/login").Handler(kithttp.NewServer(makeLoginEndpoint(service), decodeLoginRequest, encodeLoginResponse))
+		r.Methods("GET").Path("/validate").Handler(kithttp.NewServer(makeValidateEndpoint(service), decodeValidateRequest, encodeValidateResponse))
+		r.Methods("POST").Path("/logout").Handler(kithttp.NewServer(makeLogoutEndpoint(service), decodeLogoutRequest, encodeLogoutResponse))
 	}
-	s.router = r
-	return s
+	return r
 }
 
-// ServeHTTP implements http.Handler, delegating to the mux.Router.
-func (s *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
+type signupRequest struct {
+	user string
+	pass string
 }
 
-func (s *HTTPServer) handleSignup(w http.ResponseWriter, r *http.Request) {
-	var (
-		user = r.URL.Query().Get("user")
-		pass = r.URL.Query().Get("pass")
-	)
-	if err := s.service.Signup(r.Context(), user, pass); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	fmt.Fprintln(w, "signup successful")
+type signupResponse struct {
+	err error
 }
 
-func (s *HTTPServer) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var (
-		user = r.URL.Query().Get("user")
-		pass = r.URL.Query().Get("pass")
-	)
-	token, err := s.service.Login(r.Context(), user, pass)
-	if err == ErrBadAuth {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	fmt.Fprintln(w, token)
+func decodeSignupRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return signupRequest{
+		user: r.URL.Query().Get("user"),
+		pass: r.URL.Query().Get("pass"),
+	}, nil
 }
 
-func (s *HTTPServer) handleValidate(w http.ResponseWriter, r *http.Request) {
-	var (
-		user  = r.URL.Query().Get("user")
-		token = r.URL.Query().Get("token")
-	)
-	err := s.service.Validate(r.Context(), user, token)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
+func encodeSignupResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	resp := response.(signupResponse)
+	switch {
+	case resp.err == nil:
+		fmt.Fprintln(w, "signup successful")
+	case resp.err == ErrBadAuth:
+		http.Error(w, resp.err.Error(), http.StatusUnauthorized)
+	case resp.err != nil:
+		http.Error(w, resp.err.Error(), http.StatusInternalServerError)
+	default:
+		panic("unreachable")
 	}
-	fmt.Fprintln(w, "validate successful")
+	return nil
 }
 
-func (s *HTTPServer) handleLogout(w http.ResponseWriter, r *http.Request) {
-	var (
-		user  = r.URL.Query().Get("user")
-		token = r.URL.Query().Get("token")
-	)
-	err := s.service.Logout(r.Context(), user, token)
-	if err == ErrBadAuth {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
+func makeSignupEndpoint(s *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(signupRequest)
+		serr := s.Signup(ctx, req.user, req.pass)
+		return signupResponse{err: serr}, nil
 	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+}
+
+type loginRequest struct {
+	user string
+	pass string
+}
+
+type loginResponse struct {
+	token string
+	err   error
+}
+
+func decodeLoginRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return loginRequest{
+		user: r.URL.Query().Get("user"),
+		pass: r.URL.Query().Get("pass"),
+	}, nil
+}
+
+func encodeLoginResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	resp := response.(loginResponse)
+	switch {
+	case resp.err == nil:
+		fmt.Fprintln(w, resp.token)
+	case resp.err == ErrBadAuth:
+		http.Error(w, resp.err.Error(), http.StatusUnauthorized)
+	case resp.err != nil:
+		http.Error(w, resp.err.Error(), http.StatusInternalServerError)
+	default:
+		panic("unreachable")
 	}
-	fmt.Fprintln(w, "logout successful")
+	return nil
+}
+
+func makeLoginEndpoint(s *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(loginRequest)
+		token, serr := s.Login(ctx, req.user, req.pass)
+		return loginResponse{token: token, err: serr}, nil
+	}
+}
+
+type logoutRequest struct {
+	user  string
+	token string
+}
+
+type logoutResponse struct {
+	err error
+}
+
+func decodeLogoutRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return logoutRequest{
+		user:  r.URL.Query().Get("user"),
+		token: r.URL.Query().Get("token"),
+	}, nil
+}
+
+func encodeLogoutResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	resp := response.(logoutResponse)
+	switch {
+	case resp.err == nil:
+		fmt.Fprintln(w, "logout successful")
+	case resp.err == ErrBadAuth:
+		http.Error(w, resp.err.Error(), http.StatusUnauthorized)
+	case resp.err != nil:
+		http.Error(w, resp.err.Error(), http.StatusInternalServerError)
+	default:
+		panic("unreachable")
+	}
+	return nil
+}
+
+func makeLogoutEndpoint(s *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(logoutRequest)
+		serr := s.Logout(ctx, req.user, req.token)
+		return logoutResponse{err: serr}, nil
+	}
+}
+
+type validateRequest struct {
+	user  string
+	token string
+}
+
+type validateResponse struct {
+	err error
+}
+
+func decodeValidateRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return validateRequest{
+		user:  r.URL.Query().Get("user"),
+		token: r.URL.Query().Get("token"),
+	}, nil
+}
+
+func encodeValidateResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	resp := response.(validateResponse)
+	switch {
+	case resp.err == nil:
+		fmt.Fprintln(w, "validate successful")
+	case resp.err == ErrBadAuth:
+		http.Error(w, resp.err.Error(), http.StatusUnauthorized)
+	case resp.err != nil:
+		http.Error(w, resp.err.Error(), http.StatusInternalServerError)
+	default:
+		panic("unreachable")
+	}
+	return nil
+}
+
+func makeValidateEndpoint(s *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(validateRequest)
+		serr := s.Validate(ctx, req.user, req.token)
+		return validateResponse{err: serr}, nil
+	}
 }
