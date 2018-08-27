@@ -53,7 +53,7 @@ func main() {
 			logger.Log("during", "dna.NewSQLiteRepository", "err", err)
 			os.Exit(1)
 		}
-		dnasvc = dna.NewService(dnarepo, authsvc)
+		dnasvc = dna.NewService(dnarepo, authsvc, logger)
 	}
 
 	var api http.Handler
@@ -65,9 +65,9 @@ func main() {
 		// handle functions that translate to and from HTTP semantics. Note that
 		// we don't bind the auth validate method, because that's only used by
 		// other components, never by clients directly.
-		r.Methods("POST").Path("/auth/signup").HandlerFunc(handleSignup(authsvc))
-		r.Methods("POST").Path("/auth/login").HandlerFunc(handleLogin(authsvc))
-		r.Methods("POST").Path("/auth/logout").HandlerFunc(handleLogout(authsvc))
+		r.Methods("POST").Path("/auth/signup").HandlerFunc(handleSignup(authsvc, logger))
+		r.Methods("POST").Path("/auth/login").HandlerFunc(handleLogin(authsvc, logger))
+		r.Methods("POST").Path("/auth/logout").HandlerFunc(handleLogout(authsvc, logger))
 
 		// Another way to make a service accessible over HTTP is to have the
 		// service implement http.Handler directly, via a ServeHTTP method.
@@ -109,7 +109,7 @@ func main() {
 	logger.Log("exit", g.Run())
 }
 
-func handleSignup(s *auth.Service) http.HandlerFunc {
+func handleSignup(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
 			user = r.URL.Query().Get("user")
@@ -118,17 +118,20 @@ func handleSignup(s *auth.Service) http.HandlerFunc {
 		err := s.Signup(user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
+			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		fmt.Fprintln(w, "signup OK")
+		logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", nil)
 	}
 }
 
-func handleLogin(s *auth.Service) http.HandlerFunc {
+func handleLogin(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
 			user = r.URL.Query().Get("user")
@@ -137,17 +140,20 @@ func handleLogin(s *auth.Service) http.HandlerFunc {
 		token, err := s.Login(user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
+			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		fmt.Fprintln(w, token)
+		logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", nil)
 	}
 }
 
-func handleLogout(s *auth.Service) http.HandlerFunc {
+func handleLogout(s *auth.Service, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
 			user  = r.URL.Query().Get("user")
@@ -156,13 +162,16 @@ func handleLogout(s *auth.Service) http.HandlerFunc {
 		err := s.Logout(user, token)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
+			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
 			return
 		}
 		fmt.Fprintln(w, "logout OK")
+		logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", nil)
 	}
 }
 

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-kit/kit/log"
+
 	"github.com/pkg/errors"
 )
 
@@ -21,8 +23,9 @@ var (
 
 // Service provides the API.
 type Service struct {
-	repo  Repository
-	valid Validator
+	repo   Repository
+	valid  Validator
+	logger log.Logger
 }
 
 // Repository is a client-side interface, which models
@@ -42,10 +45,11 @@ type Validator interface {
 }
 
 // NewService returns a usable service, wrapping a repository.
-func NewService(r Repository, v Validator) *Service {
+func NewService(r Repository, v Validator, logger log.Logger) *Service {
 	return &Service{
-		repo:  r,
-		valid: v,
+		repo:   r,
+		valid:  v,
+		logger: logger,
 	}
 }
 
@@ -103,7 +107,9 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token    = r.URL.Query().Get("token")
 			sequence = r.URL.Query().Get("sequence")
 		)
-		switch err := s.Add(user, token, sequence); true {
+		err := s.Add(user, token, sequence)
+		s.logger.Log("http_method", method, "http_path", r.URL.Path, "user", user, "err", err)
+		switch {
 		case err == nil:
 			fmt.Fprintln(w, "Add OK")
 		case err == ErrBadAuth:
@@ -118,7 +124,9 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token       = r.URL.Query().Get("token")
 			subsequence = r.URL.Query().Get("subsequence")
 		)
-		switch err := s.Check(user, token, subsequence); true {
+		err := s.Check(user, token, subsequence)
+		s.logger.Log("http_method", method, "http_path", r.URL.Path, "user", user, "err", err)
+		switch {
 		case err == nil:
 			fmt.Fprintln(w, "Subsequence found")
 		case err == ErrSubsequenceNotFound:
@@ -130,6 +138,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	default:
+		s.logger.Log("http_method", method, "http_path", r.URL.Path, "err", http.StatusText(http.StatusNotFound))
 		http.NotFound(w, r)
 	}
 }
