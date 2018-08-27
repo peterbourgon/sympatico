@@ -65,6 +65,11 @@ func main() {
 		authsvc = auth.NewService(authrepo, authEventsTotal)
 	}
 
+	var authserver *auth.HTTPServer
+	{
+		authserver = auth.NewHTTPServer(authsvc)
+	}
+
 	var dnasvc *dna.Service
 	{
 		dnarepo, err := dna.NewSQLiteRepository(*dnaURN)
@@ -75,24 +80,16 @@ func main() {
 		dnasvc = dna.NewService(dnarepo, authsvc, dnaCheckDuration)
 	}
 
+	var dnaserver *dna.HTTPServer
+	{
+		dnaserver = dna.NewHTTPServer(dnasvc)
+	}
+
 	var api http.Handler
 	{
-		// The HTTP API mounts endpoints to be consumed by clients.
 		r := mux.NewRouter()
-
-		// One way to make a service accessible over HTTP is to write individual
-		// handle functions that translate to and from HTTP semantics. Note that
-		// we don't bind the auth validate method, because that's only used by
-		// other components, never by clients directly.
-		r.Methods("POST").Path("/auth/signup").HandlerFunc(handleSignup(authsvc))
-		r.Methods("POST").Path("/auth/login").HandlerFunc(handleLogin(authsvc))
-		r.Methods("POST").Path("/auth/logout").HandlerFunc(handleLogout(authsvc))
-
-		// Another way to make a service accessible over HTTP is to have the
-		// service implement http.Handler directly, via a ServeHTTP method.
-		r.PathPrefix("/dna/").Handler(http.StripPrefix("/dna", dnasvc))
-
-		// Wrap the router with a common logging middleware.
+		r.PathPrefix("/auth/").Handler(http.StripPrefix("/auth", authserver))
+		r.PathPrefix("/dna/").Handler(http.StripPrefix("/dna", dnaserver))
 		api = newLoggingMiddleware(r, logger)
 	}
 
@@ -130,63 +127,6 @@ func main() {
 		})
 	}
 	logger.Log("exit", g.Run())
-}
-
-func handleSignup(s *auth.Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var (
-			user = r.URL.Query().Get("user")
-			pass = r.URL.Query().Get("pass")
-		)
-		err := s.Signup(r.Context(), user, pass)
-		if err == auth.ErrBadAuth {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fmt.Fprintln(w, "signup OK")
-	}
-}
-
-func handleLogin(s *auth.Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var (
-			user = r.URL.Query().Get("user")
-			pass = r.URL.Query().Get("pass")
-		)
-		token, err := s.Login(r.Context(), user, pass)
-		if err == auth.ErrBadAuth {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fmt.Fprintln(w, token)
-	}
-}
-
-func handleLogout(s *auth.Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var (
-			user  = r.URL.Query().Get("user")
-			token = r.URL.Query().Get("token")
-		)
-		err := s.Logout(r.Context(), user, token)
-		if err == auth.ErrBadAuth {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fmt.Fprintln(w, "logout OK")
-	}
 }
 
 func usageFor(fs *flag.FlagSet, short string) func() {
