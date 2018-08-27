@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/go-kit/kit/endpoint"
+	"github.com/go-kit/kit/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 // endpoints collects all of the endpoints that compose an authsvc.
@@ -17,9 +19,13 @@ type endpoints struct {
 }
 
 func makeEndpoints(s *Service) endpoints {
+	var (
+		limitSignup = ratelimit.NewErroringLimiter(rate.NewLimiter(3, 3)) // 3 QPS
+		limitLogin  = ratelimit.NewDelayingLimiter(rate.NewLimiter(1, 3)) // 1 QPS
+	)
 	return endpoints{
-		signup:   makeSignupEndpoint(s),
-		login:    makeLoginEndpoint(s),
+		signup:   limitSignup(makeSignupEndpoint(s)),
+		login:    limitLogin(makeLoginEndpoint(s)),
 		validate: makeValidateEndpoint(s),
 		logout:   makeLogoutEndpoint(s),
 	}
