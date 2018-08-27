@@ -61,15 +61,10 @@ func main() {
 		authsvc = auth.NewService(authrepo, authEventsTotal)
 	}
 
-	var authserver *auth.HTTPServer
-	{
-		authserver = auth.NewHTTPServer(authsvc)
-	}
-
 	var api http.Handler
 	{
 		r := mux.NewRouter()
-		r.PathPrefix("/auth/").Handler(http.StripPrefix("/auth", authserver))
+		r.PathPrefix("/auth/").Handler(http.StripPrefix("/auth", auth.NewGoKitHandler(authsvc)))
 		api = ctxlog.NewHTTPMiddleware(r, logger)
 	}
 
