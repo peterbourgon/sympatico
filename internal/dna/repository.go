@@ -1,6 +1,7 @@
 package dna
 
 import (
+	"context"
 	"database/sql"
 
 	_ "github.com/mattn/go-sqlite3" // driver
@@ -42,8 +43,8 @@ func NewSQLiteRepository(urn string) (*SQLiteRepository, error) {
 }
 
 // Insert a user's DNA sequence to the repository.
-func (r *SQLiteRepository) Insert(user, sequence string) error {
-	_, err := r.db.Exec(`INSERT INTO dna(user, sequence) VALUES(?, ?)`, user, sequence)
+func (r *SQLiteRepository) Insert(ctx context.Context, user, sequence string) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO dna(user, sequence) VALUES(?, ?)`, user, sequence)
 	if err != nil {
 		return errors.Wrap(err, "error writing to repository")
 	}
@@ -51,8 +52,8 @@ func (r *SQLiteRepository) Insert(user, sequence string) error {
 }
 
 // Select a user's DNA sequence from the repository.
-func (r *SQLiteRepository) Select(user string) (sequence string, err error) {
-	if err := r.db.QueryRow(`SELECT sequence FROM dna WHERE user = ?`, user).Scan(&sequence); err == sql.ErrNoRows {
+func (r *SQLiteRepository) Select(ctx context.Context, user string) (sequence string, err error) {
+	if err := r.db.QueryRowContext(ctx, `SELECT sequence FROM dna WHERE user = ?`, user).Scan(&sequence); err == sql.ErrNoRows {
 		return "", ErrInvalidUser
 	} else if err != nil {
 		return "", errors.Wrap(err, "error reading from repository")

@@ -1,6 +1,7 @@
 package dna
 
 import (
+	"context"
 	"testing"
 
 	"github.com/go-kit/kit/log"
@@ -16,10 +17,10 @@ func TestFlow(t *testing.T) {
 		s     = NewService(repo, valid, log.NewNopLogger())
 	)
 
-	if want, have := ErrBadAuth, s.Add(user, "invalid_token", "gattaca"); want != have {
+	if want, have := ErrBadAuth, s.Add(context.Background(), user, "invalid_token", "gattaca"); want != have {
 		t.Errorf("Add with bad token: want %v, have %v", want, have)
 	}
-	if want, have := error(nil), s.Add("vincent", "some_token", "gattaca"); want != have {
+	if want, have := error(nil), s.Add(context.Background(), "vincent", "some_token", "gattaca"); want != have {
 		t.Errorf("Add: want %v, have %v", want, have)
 	}
 
@@ -33,7 +34,7 @@ func TestFlow(t *testing.T) {
 		"gata":     ErrSubsequenceNotFound,
 		"gattacaa": ErrSubsequenceNotFound,
 	} {
-		if have := s.Check("vincent", "some_token", subsequence); want != have {
+		if have := s.Check(context.Background(), "vincent", "some_token", subsequence); want != have {
 			t.Errorf("Check(%q): want %v, have %v", subsequence, want, have)
 		}
 	}
@@ -53,7 +54,7 @@ func TestValidSequences(t *testing.T) {
 			valid = newMockValidator(user, token)
 			s     = NewService(repo, valid, log.NewNopLogger())
 		)
-		if have := s.Add(user, token, sequence); want != have {
+		if have := s.Add(context.Background(), user, token, sequence); want != have {
 			t.Errorf("Add(%q): want %v, have %v", sequence, want, have)
 		}
 	}
@@ -69,7 +70,7 @@ func newMockRepo() *mockRepo {
 	}
 }
 
-func (r *mockRepo) Insert(user, sequence string) error {
+func (r *mockRepo) Insert(ctx context.Context, user, sequence string) error {
 	if _, ok := r.dna[user]; ok {
 		return errors.New("user already exists")
 	}
@@ -78,7 +79,7 @@ func (r *mockRepo) Insert(user, sequence string) error {
 	return nil
 }
 
-func (r *mockRepo) Select(user string) (sequence string, err error) {
+func (r *mockRepo) Select(ctx context.Context, user string) (sequence string, err error) {
 	sequence, ok := r.dna[user]
 	if !ok {
 		return "", ErrInvalidUser
@@ -100,7 +101,7 @@ func newMockValidator(usertokens ...string) *mockValidator {
 	}
 }
 
-func (v *mockValidator) Validate(user, token string) error {
+func (v *mockValidator) Validate(ctx context.Context, user, token string) error {
 	if have, ok := v.tokens[user]; !ok || token != have {
 		return ErrBadAuth
 	}

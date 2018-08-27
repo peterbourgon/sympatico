@@ -1,6 +1,7 @@
 package dna
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -11,11 +12,11 @@ func TestSQLiteFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = r.Select("invalid user")
+	_, err = r.Select(context.Background(), "invalid user")
 	if want, have := ErrInvalidUser, err; want != have {
 		t.Errorf("Select with bad user: want %v, have %v", want, have)
 	}
-	sequence, err := r.Select("charlie")
+	sequence, err := r.Select(context.Background(), "charlie")
 	if want, have := error(nil), err; want != have {
 		t.Errorf("Select with bad user: want %v, have %v", want, have)
 	}
@@ -52,11 +53,11 @@ func TestSQLiteIntegration(t *testing.T) {
 		user     = "vincent"
 		sequence = "gattaca"
 	)
-	if want, have := error(nil), r.Insert(user, sequence); want != have {
+	if want, have := error(nil), r.Insert(context.Background(), user, sequence); want != have {
 		t.Fatalf("Insert: want %v, have %v", want, have)
 	}
 
-	selected, err := r.Select(user)
+	selected, err := r.Select(context.Background(), user)
 	if want, have := error(nil), err; want != have {
 		t.Fatalf("Select: want %v, have %v", want, have)
 	}

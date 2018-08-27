@@ -1,5 +1,7 @@
 package auth
 
+import "context"
+
 // Service provides the API.
 type Service struct {
 	repo Repository
@@ -8,10 +10,10 @@ type Service struct {
 // Repository is a client-side interface, which models
 // the concrete e.g. SQLiteRepository.
 type Repository interface {
-	Create(user, pass string) error
-	Auth(user, pass string) (token string, err error)
-	Deauth(user, token string) error
-	Validate(user, token string) error
+	Create(ctx context.Context, user, pass string) error
+	Auth(ctx context.Context, user, pass string) (token string, err error)
+	Deauth(ctx context.Context, user, token string) error
+	Validate(ctx context.Context, user, token string) error
 }
 
 // NewService returns a usable service, wrapping a repository.
@@ -25,23 +27,23 @@ func NewService(repo Repository) *Service {
 
 // Signup creates a user with the given pass.
 // The user still needs to login.
-func (s *Service) Signup(user, pass string) error {
-	return s.repo.Create(user, pass)
+func (s *Service) Signup(ctx context.Context, user, pass string) error {
+	return s.repo.Create(ctx, user, pass)
 }
 
 // Login logs the user in, if the pass is correct.
 // The returned token should be passed to Logout or Validate.
-func (s *Service) Login(user, pass string) (token string, err error) {
-	return s.repo.Auth(user, pass)
+func (s *Service) Login(ctx context.Context, user, pass string) (token string, err error) {
+	return s.repo.Auth(ctx, user, pass)
 }
 
 // Logout logs the user out, if the token is valid.
-func (s *Service) Logout(user, token string) error {
-	return s.repo.Deauth(user, token)
+func (s *Service) Logout(ctx context.Context, user, token string) error {
+	return s.repo.Deauth(ctx, user, token)
 }
 
 // Validate returns a nil error if the user is logged in and
 // provides the correct token.
-func (s *Service) Validate(user, token string) error {
-	return s.repo.Validate(user, token)
+func (s *Service) Validate(ctx context.Context, user, token string) error {
+	return s.repo.Validate(ctx, user, token)
 }

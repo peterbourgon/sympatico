@@ -1,6 +1,7 @@
 package dna
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -34,14 +35,14 @@ type Service struct {
 // We use an interface instead of the concrete type,
 // so we can more easily test the Service.
 type Repository interface {
-	Insert(user, sequence string) error
-	Select(user string) (sequence string, err error)
+	Insert(ctx context.Context, user, sequence string) error
+	Select(ctx context.Context, user string) (sequence string, err error)
 }
 
 // Validator is a client-side interface, which models
 // the parts of the auth service that we use.
 type Validator interface {
-	Validate(user, token string) error
+	Validate(ctx context.Context, user, token string) error
 }
 
 // NewService returns a usable service, wrapping a repository.
@@ -54,14 +55,14 @@ func NewService(r Repository, v Validator, logger log.Logger) *Service {
 }
 
 // Add a user and their DNA sequence to the database.
-func (s *Service) Add(user, token, sequence string) error {
-	if err := s.valid.Validate(user, token); err != nil {
+func (s *Service) Add(ctx context.Context, user, token, sequence string) error {
+	if err := s.valid.Validate(ctx, user, token); err != nil {
 		return ErrBadAuth
 	}
 	if !validSequence(sequence) {
 		return ErrInvalidSequence
 	}
-	if err := s.repo.Insert(user, sequence); err != nil {
+	if err := s.repo.Insert(ctx, user, sequence); err != nil {
 		return errors.Wrap(err, "error adding new user")
 	}
 	return nil
@@ -80,11 +81,11 @@ func validSequence(sequence string) bool {
 }
 
 // Check returns true if the given subsequence is present in the user's DNA.
-func (s *Service) Check(user, token, subsequence string) error {
-	if err := s.valid.Validate(user, token); err != nil {
+func (s *Service) Check(ctx context.Context, user, token, subsequence string) error {
+	if err := s.valid.Validate(ctx, user, token); err != nil {
 		return ErrBadAuth
 	}
-	sequence, err := s.repo.Select(user)
+	sequence, err := s.repo.Select(ctx, user)
 	if err != nil {
 		return errors.Wrap(err, "error reading DNA sequence from repository")
 	}
@@ -107,7 +108,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token    = r.URL.Query().Get("token")
 			sequence = r.URL.Query().Get("sequence")
 		)
-		err := s.Add(user, token, sequence)
+		err := s.Add(r.Context(), user, token, sequence)
 		s.logger.Log("http_method", method, "http_path", r.URL.Path, "user", user, "err", err)
 		switch {
 		case err == nil:
@@ -124,7 +125,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			token       = r.URL.Query().Get("token")
 			subsequence = r.URL.Query().Get("subsequence")
 		)
-		err := s.Check(user, token, subsequence)
+		err := s.Check(r.Context(), user, token, subsequence)
 		s.logger.Log("http_method", method, "http_path", r.URL.Path, "user", user, "err", err)
 		switch {
 		case err == nil:

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -11,26 +12,26 @@ func TestSQLiteFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = r.Auth("bob", "bad password")
+	_, err = r.Auth(context.Background(), "bob", "bad password")
 	if want, have := ErrBadAuth, err; want != have {
 		t.Errorf("Auth with bad creds: want %v, have %v", want, have)
 	}
-	token, err := r.Auth("bob", "qwerty")
+	token, err := r.Auth(context.Background(), "bob", "qwerty")
 	if want, have := error(nil), err; want != have {
 		t.Fatalf("Auth failed: %v", err)
 	}
 
-	if want, have := ErrBadAuth, r.Validate("bob", "bad token"); want != have {
+	if want, have := ErrBadAuth, r.Validate(context.Background(), "bob", "bad token"); want != have {
 		t.Errorf("Validate with bad token: want %v, have %v", want, have)
 	}
-	if want, have := error(nil), r.Validate("bob", token); want != have {
+	if want, have := error(nil), r.Validate(context.Background(), "bob", token); want != have {
 		t.Errorf("Validate: want %v, have %v", want, have)
 	}
 
-	if want, have := ErrBadAuth, r.Deauth("bob", "bad token"); want != have {
+	if want, have := ErrBadAuth, r.Deauth(context.Background(), "bob", "bad token"); want != have {
 		t.Errorf("Deauth with bad token: want %v, have %v", want, have)
 	}
-	if want, have := error(nil), r.Deauth("bob", token); want != have {
+	if want, have := error(nil), r.Deauth(context.Background(), "bob", token); want != have {
 		t.Errorf("Deauth: want %v, have %v", want, have)
 	}
 }
@@ -63,20 +64,20 @@ func TestSQLiteIntegration(t *testing.T) {
 		user = "alpha"
 		pass = "beta"
 	)
-	if want, have := error(nil), r.Create(user, pass); want != have {
+	if want, have := error(nil), r.Create(context.Background(), user, pass); want != have {
 		t.Fatalf("Create: want %v, have %v", want, have)
 	}
 
-	token, err := r.Auth(user, pass)
+	token, err := r.Auth(context.Background(), user, pass)
 	if want, have := error(nil), err; want != have {
 		t.Fatalf("Auth: want %v, have %v", want, have)
 	}
 
-	if want, have := error(nil), r.Validate(user, token); want != have {
+	if want, have := error(nil), r.Validate(context.Background(), user, token); want != have {
 		t.Errorf("Validate: want %v, have %v", want, have)
 	}
 
-	if want, have := error(nil), r.Deauth(user, token); want != have {
+	if want, have := error(nil), r.Deauth(context.Background(), user, token); want != have {
 		t.Errorf("Deauth: want %v, have %v", want, have)
 	}
 }

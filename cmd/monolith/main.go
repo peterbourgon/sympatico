@@ -115,7 +115,7 @@ func handleSignup(s *auth.Service, logger log.Logger) http.HandlerFunc {
 			user = r.URL.Query().Get("user")
 			pass = r.URL.Query().Get("pass")
 		)
-		err := s.Signup(user, pass)
+		err := s.Signup(r.Context(), user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
@@ -137,7 +137,7 @@ func handleLogin(s *auth.Service, logger log.Logger) http.HandlerFunc {
 			user = r.URL.Query().Get("user")
 			pass = r.URL.Query().Get("pass")
 		)
-		token, err := s.Login(user, pass)
+		token, err := s.Login(r.Context(), user, pass)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)
@@ -159,7 +159,7 @@ func handleLogout(s *auth.Service, logger log.Logger) http.HandlerFunc {
 			user  = r.URL.Query().Get("user")
 			token = r.URL.Query().Get("token")
 		)
-		err := s.Logout(user, token)
+		err := s.Logout(r.Context(), user, token)
 		if err == auth.ErrBadAuth {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			logger.Log("http_method", r.Method, "http_path", r.URL.Path, "user", user, "err", err)

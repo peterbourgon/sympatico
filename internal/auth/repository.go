@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
@@ -52,7 +53,7 @@ func NewSQLiteRepository(urn string) (*SQLiteRepository, error) {
 
 // Create a user with associated password.
 // The user still needs to log in.
-func (r *SQLiteRepository) Create(user, pass string) error {
+func (r *SQLiteRepository) Create(ctx context.Context, user, pass string) error {
 	if _, err := r.db.Exec(`INSERT INTO credentials (user, pass) VALUES (?, ?)`, user, pass); err != nil {
 		return errors.Wrap(err, "error creating user")
 	}
@@ -61,8 +62,8 @@ func (r *SQLiteRepository) Create(user, pass string) error {
 
 // Auth a user, if the pass is correct, and return a token.
 // If the user is already authed, overwrites the token.
-func (r *SQLiteRepository) Auth(user, pass string) (token string, err error) {
-	tx, err := r.db.Begin()
+func (r *SQLiteRepository) Auth(ctx context.Context, user, pass string) (token string, err error) {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "error starting auth transaction")
 	}
@@ -78,7 +79,7 @@ func (r *SQLiteRepository) Auth(user, pass string) (token string, err error) {
 	}()
 
 	var want string
-	err = tx.QueryRow(`SELECT pass FROM credentials WHERE user = ?`, user).Scan(&want)
+	err = tx.QueryRowContext(ctx, `SELECT pass FROM credentials WHERE user = ?`, user).Scan(&want)
 	if err == sql.ErrNoRows {
 		return "", ErrBadAuth
 	}
@@ -92,7 +93,7 @@ func (r *SQLiteRepository) Auth(user, pass string) (token string, err error) {
 	p := make([]byte, 8)
 	rand.New(rand.NewSource(time.Now().UnixNano())).Read(p)
 	token = fmt.Sprintf("%x", p)
-	if _, err = tx.Exec(`INSERT INTO tokens(user, token) VALUES(?, ?)`, user, token); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO tokens(user, token) VALUES(?, ?)`, user, token); err != nil {
 		return "", errors.Wrap(err, "error saving token to repository")
 	}
 
@@ -100,8 +101,8 @@ func (r *SQLiteRepository) Auth(user, pass string) (token string, err error) {
 }
 
 // Deauth a user, if the token is correct.
-func (r *SQLiteRepository) Deauth(user, token string) error {
-	tx, err := r.db.Begin()
+func (r *SQLiteRepository) Deauth(ctx context.Context, user, token string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Wrap(err, "error starting deauth transaction")
 	}
@@ -117,7 +118,7 @@ func (r *SQLiteRepository) Deauth(user, token string) error {
 	}()
 
 	var want string
-	err = tx.QueryRow(`SELECT token FROM tokens WHERE user = ?`, user).Scan(&want)
+	err = tx.QueryRowContext(ctx, `SELECT token FROM tokens WHERE user = ?`, user).Scan(&want)
 	if err == sql.ErrNoRows {
 		return ErrBadAuth // not logged in
 	}
@@ -128,7 +129,7 @@ func (r *SQLiteRepository) Deauth(user, token string) error {
 		return ErrBadAuth
 	}
 
-	if _, err := tx.Exec(`DELETE FROM tokens WHERE user = ?`, user); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tokens WHERE user = ?`, user); err != nil {
 		return errors.Wrap(err, "error removing token from repository")
 	}
 
@@ -136,9 +137,9 @@ func (r *SQLiteRepository) Deauth(user, token string) error {
 }
 
 // Validate the user and token.
-func (r *SQLiteRepository) Validate(user, token string) error {
+func (r *SQLiteRepository) Validate(ctx context.Context, user, token string) error {
 	var want string
-	err := r.db.QueryRow(`SELECT token FROM tokens WHERE user = ?`, user).Scan(&want)
+	err := r.db.QueryRowContext(ctx, `SELECT token FROM tokens WHERE user = ?`, user).Scan(&want)
 	if err == sql.ErrNoRows {
 		return ErrBadAuth // not logged in
 	}
