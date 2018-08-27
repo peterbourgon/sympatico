@@ -1,27 +1,29 @@
-package main
+package ctxlog
 
 import (
 	"net/http"
 	"time"
 
 	"github.com/go-kit/kit/log"
-
-	"github.com/peterbourgon/sympatico/internal/ctxlog"
 )
 
-type loggingMiddleware struct {
+// HTTPMiddleware uses the Logger to implement basic structured request logging.
+type HTTPMiddleware struct {
 	next   http.Handler
 	logger log.Logger
 }
 
-func newLoggingMiddleware(next http.Handler, logger log.Logger) *loggingMiddleware {
-	return &loggingMiddleware{next, logger}
+// NewHTTPMiddleware wraps an http.Handler and a log.Logger,
+// and performs structured request logging.
+func NewHTTPMiddleware(next http.Handler, logger log.Logger) *HTTPMiddleware {
+	return &HTTPMiddleware{next, logger}
 }
 
-func (mw *loggingMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP implements http.Handler.
+func (mw *HTTPMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		iw          = &interceptingWriter{http.StatusOK, w}
-		ctx, ctxlog = ctxlog.New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
+		ctx, ctxlog = New(r.Context(), "http_method", r.Method, "http_path", r.URL.Path)
 	)
 
 	defer func(begin time.Time) {

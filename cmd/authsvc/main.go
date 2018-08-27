@@ -3,12 +3,10 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"text/tabwriter"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -20,6 +18,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/peterbourgon/sympatico/internal/auth"
+	"github.com/peterbourgon/sympatico/internal/ctxlog"
+	"github.com/peterbourgon/sympatico/internal/usage"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 		apiAddr = fs.String("api", "127.0.0.1:8081", "HTTP API listen address")
 		authURN = fs.String("auth-urn", "auth.db", "URN for auth DB")
 	)
-	fs.Usage = usageFor(fs, "authsvc [flags]")
+	fs.Usage = usage.For(fs, "authsvc [flags]")
 	fs.Parse(os.Args[1:])
 
 	var logger log.Logger
@@ -70,7 +70,7 @@ func main() {
 	{
 		r := mux.NewRouter()
 		r.PathPrefix("/auth/").Handler(http.StripPrefix("/auth", authserver))
-		api = newLoggingMiddleware(r, logger)
+		api = ctxlog.NewHTTPMiddleware(r, logger)
 	}
 
 	var g run.Group
@@ -104,23 +104,4 @@ func main() {
 		})
 	}
 	logger.Log("exit", g.Run())
-}
-
-func usageFor(fs *flag.FlagSet, short string) func() {
-	return func() {
-		fmt.Fprintf(os.Stdout, "USAGE\n")
-		fmt.Fprintf(os.Stdout, "  %s\n", short)
-		fmt.Fprintf(os.Stdout, "\n")
-		fmt.Fprintf(os.Stdout, "FLAGS\n")
-		tw := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-		fs.VisitAll(func(f *flag.Flag) {
-			def := f.DefValue
-			if def == "" {
-				def = "..."
-			}
-			fmt.Fprintf(tw, "  -%s %s\t%s\n", f.Name, f.DefValue, f.Usage)
-		})
-		tw.Flush()
-		fmt.Fprintf(os.Stderr, "\n")
-	}
 }
