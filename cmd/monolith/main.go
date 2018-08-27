@@ -15,6 +15,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/peterbourgon/sympatico/internal/auth"
 	"github.com/peterbourgon/sympatico/internal/dna"
@@ -36,6 +39,22 @@ func main() {
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	}
 
+	var authEventsTotal *prometheus.CounterVec
+	var dnaCheckDuration *prometheus.HistogramVec
+	{
+		authEventsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+			Subsystem: "auth",
+			Name:      "events_total",
+			Help:      "Total number of auth events.",
+		}, []string{"method", "success"})
+		dnaCheckDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+			Subsystem: "dna",
+			Name:      "check_duration_seconds",
+			Help:      "Time spent performing DNA subsequence checks.",
+			Buckets:   prometheus.DefBuckets,
+		}, []string{"success"})
+	}
+
 	var authsvc *auth.Service
 	{
 		authrepo, err := auth.NewSQLiteRepository(*authURN)
@@ -43,7 +62,7 @@ func main() {
 			logger.Log("during", "auth.NewSQLiteRepository", "err", err)
 			os.Exit(1)
 		}
-		authsvc = auth.NewService(authrepo)
+		authsvc = auth.NewService(authrepo, authEventsTotal)
 	}
 
 	var dnasvc *dna.Service
@@ -53,7 +72,7 @@ func main() {
 			logger.Log("during", "dna.NewSQLiteRepository", "err", err)
 			os.Exit(1)
 		}
-		dnasvc = dna.NewService(dnarepo, authsvc)
+		dnasvc = dna.NewService(dnarepo, authsvc, dnaCheckDuration)
 	}
 
 	var api http.Handler
@@ -79,9 +98,12 @@ func main() {
 
 	var g run.Group
 	{
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		mux.Handle("/", api)
 		server := &http.Server{
 			Addr:    *apiAddr,
-			Handler: api,
+			Handler: mux,
 		}
 		g.Add(func() error {
 			logger.Log("component", "API", "addr", *apiAddr)

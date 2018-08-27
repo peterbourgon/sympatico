@@ -5,7 +5,15 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+var nopCheckDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	Subsystem: "test",
+	Name:      "check_duration_seconds",
+	Help:      "Mock histogram.",
+	Buckets:   prometheus.DefBuckets,
+}, []string{"success"})
 
 func TestFlow(t *testing.T) {
 	var (
@@ -13,7 +21,7 @@ func TestFlow(t *testing.T) {
 		user  = "vincent"
 		token = "some_token"
 		valid = newMockValidator(user, token)
-		s     = NewService(repo, valid)
+		s     = NewService(repo, valid, nopCheckDuration)
 	)
 
 	if want, have := ErrBadAuth, s.Add(context.Background(), user, "invalid_token", "gattaca"); want != have {
@@ -51,7 +59,7 @@ func TestValidSequences(t *testing.T) {
 			user  = "foo"
 			token = "bar"
 			valid = newMockValidator(user, token)
-			s     = NewService(repo, valid)
+			s     = NewService(repo, valid, nopCheckDuration)
 		)
 		if have := s.Add(context.Background(), user, token, sequence); want != have {
 			t.Errorf("Add(%q): want %v, have %v", sequence, want, have)

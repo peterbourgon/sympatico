@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/peterbourgon/sympatico/internal/ctxlog"
 )
@@ -24,8 +26,9 @@ var (
 
 // Service provides the API.
 type Service struct {
-	repo  Repository
-	valid Validator
+	repo          Repository
+	valid         Validator
+	checkDuration *prometheus.HistogramVec
 }
 
 // Repository is a client-side interface, which models
@@ -45,10 +48,11 @@ type Validator interface {
 }
 
 // NewService returns a usable service, wrapping a repository.
-func NewService(r Repository, v Validator) *Service {
+func NewService(r Repository, v Validator, checkDuration *prometheus.HistogramVec) *Service {
 	return &Service{
-		repo:  r,
-		valid: v,
+		repo:          r,
+		valid:         v,
+		checkDuration: checkDuration,
 	}
 }
 
@@ -87,9 +91,10 @@ func validSequence(sequence string) bool {
 
 // Check returns true if the given subsequence is present in the user's DNA.
 func (s *Service) Check(ctx context.Context, user, token, subsequence string) (err error) {
-	defer func() {
+	defer func(begin time.Time) {
 		ctxlog.From(ctx).Log("dna_method", "Check", "check_user", user, "check_subseq", subsequence, "check_err", err)
-	}()
+		s.checkDuration.WithLabelValues(fmt.Sprint(err == nil)).Observe(time.Since(begin).Seconds())
+	}(time.Now())
 
 	if err := s.valid.Validate(ctx, user, token); err != nil {
 		return ErrBadAuth

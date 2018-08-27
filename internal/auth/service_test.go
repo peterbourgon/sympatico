@@ -8,10 +8,17 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
+var nopEventsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Subsystem: "test",
+	Name:      "events_total",
+	Help:      "Mock counter.",
+}, []string{"method", "success"})
+
 func TestFlow(t *testing.T) {
-	s := NewService(newMockRepo())
+	s := NewService(newMockRepo(), nopEventsTotal)
 
 	if want, have := error(nil), s.Signup(context.Background(), "peter", "123456"); want != have {
 		t.Fatalf("Signup: want %v, have %v", want, have)
