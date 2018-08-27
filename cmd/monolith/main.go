@@ -17,7 +17,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/peterbourgon/sympatico/internal/auth"
 	"github.com/peterbourgon/sympatico/internal/ctxlog"
 	"github.com/peterbourgon/sympatico/internal/dna"
 	"github.com/peterbourgon/sympatico/internal/usage"
@@ -26,9 +25,9 @@ import (
 func main() {
 	fs := flag.NewFlagSet("monolith", flag.ExitOnError)
 	var (
-		apiAddr = fs.String("api", "127.0.0.1:8080", "HTTP API listen address")
-		authURN = fs.String("auth-urn", "file:auth.db", "URN for auth DB")
-		dnaURN  = fs.String("dna-urn", "file:dna.db", "URN for DNA DB")
+		apiAddr     = fs.String("api", "127.0.0.1:8080", "HTTP API listen address")
+		authsvcAddr = fs.String("authsvc", "http://127.0.0.1:8081", "HTTP endpoint for authsvc")
+		dnaURN      = fs.String("dna-urn", "file:dna.db", "URN for DNA DB")
 	)
 	fs.Usage = usage.For(fs, "monolith [flags]")
 	fs.Parse(os.Args[1:])
@@ -39,14 +38,8 @@ func main() {
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	}
 
-	var authEventsTotal *prometheus.CounterVec
 	var dnaCheckDuration *prometheus.HistogramVec
 	{
-		authEventsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Subsystem: "auth",
-			Name:      "events_total",
-			Help:      "Total number of auth events.",
-		}, []string{"method", "success"})
 		dnaCheckDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Subsystem: "dna",
 			Name:      "check_duration_seconds",
@@ -55,19 +48,9 @@ func main() {
 		}, []string{"success"})
 	}
 
-	var authsvc *auth.Service
+	var authsvc dna.Validator
 	{
-		authrepo, err := auth.NewSQLiteRepository(*authURN)
-		if err != nil {
-			logger.Log("during", "auth.NewSQLiteRepository", "err", err)
-			os.Exit(1)
-		}
-		authsvc = auth.NewService(authrepo, authEventsTotal)
-	}
-
-	var authserver *auth.HTTPServer
-	{
-		authserver = auth.NewHTTPServer(authsvc)
+		authsvc = newAuthClient(*authsvcAddr)
 	}
 
 	var dnasvc *dna.Service
@@ -88,7 +71,6 @@ func main() {
 	var api http.Handler
 	{
 		r := mux.NewRouter()
-		r.PathPrefix("/auth/").Handler(http.StripPrefix("/auth", authserver))
 		r.PathPrefix("/dna/").Handler(http.StripPrefix("/dna", dnaserver))
 		api = ctxlog.NewHTTPMiddleware(r, logger)
 	}
