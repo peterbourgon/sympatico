@@ -14,6 +14,9 @@ var (
 
 	// ErrBadAuth is returned if a user validation check fails.
 	ErrBadAuth = errors.New("bad auth")
+
+	// ErrInvalidSequence is returned if an invalid sequence is added.
+	ErrInvalidSequence = errors.New("invalid DNA sequence")
 )
 
 // Service provides the API.
@@ -51,10 +54,25 @@ func (s *Service) Add(user, token, sequence string) error {
 	if err := s.valid.Validate(user, token); err != nil {
 		return ErrBadAuth
 	}
+	if !validSequence(sequence) {
+		return ErrInvalidSequence
+	}
 	if err := s.repo.Insert(user, sequence); err != nil {
 		return errors.Wrap(err, "error adding new user")
 	}
 	return nil
+}
+
+func validSequence(sequence string) bool {
+	for _, r := range sequence {
+		switch r {
+		case 'g', 'a', 't', 'c':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // Check returns true if the given subsequence is present in the user's DNA.

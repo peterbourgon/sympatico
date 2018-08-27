@@ -38,6 +38,26 @@ func TestFlow(t *testing.T) {
 	}
 }
 
+func TestValidSequences(t *testing.T) {
+	for sequence, want := range map[string]error{
+		"":          nil,
+		"gattaca":   nil,
+		"abba":      ErrInvalidSequence,
+		"metallica": ErrInvalidSequence,
+	} {
+		var (
+			repo  = newMockRepo()
+			user  = "foo"
+			token = "bar"
+			valid = newMockValidator(user, token)
+			s     = NewService(repo, valid)
+		)
+		if have := s.Add(user, token, sequence); want != have {
+			t.Errorf("Add(%q): want %v, have %v", sequence, want, have)
+		}
+	}
+}
+
 type mockRepo struct {
 	dna map[string]string
 }
